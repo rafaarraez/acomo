@@ -52,6 +52,38 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
+// Splash screens de iOS (Safari no usa el manifest para esto): una imagen por
+// resolución de iPhone, del 6/7/8 a la serie 16. En Android el splash se genera
+// solo desde el manifest (ícono + nombre + fondo).
+const IOS_SPLASH: { w: number; h: number; r: number }[] = [
+  { w: 375, h: 667, r: 2 }, // SE 2/3, 6/7/8
+  { w: 414, h: 736, r: 3 }, // 6+/7+/8+
+  { w: 375, h: 812, r: 3 }, // X/XS/11 Pro, 12/13 mini
+  { w: 414, h: 896, r: 2 }, // XR/11
+  { w: 414, h: 896, r: 3 }, // XS Max/11 Pro Max
+  { w: 390, h: 844, r: 3 }, // 12/13/14
+  { w: 428, h: 926, r: 3 }, // 12/13 Pro Max, 14 Plus
+  { w: 393, h: 852, r: 3 }, // 14 Pro, 15/15 Pro, 16
+  { w: 430, h: 932, r: 3 }, // 14 Pro Max, 15 Plus/Pro Max, 16 Plus
+  { w: 402, h: 874, r: 3 }, // 16 Pro
+  { w: 440, h: 956, r: 3 }, // 16 Pro Max
+];
+
+function AppleSplashLinks() {
+  return (
+    <>
+      {IOS_SPLASH.map(({ w, h, r }) => (
+        <link
+          key={`${w}x${h}@${r}`}
+          rel="apple-touch-startup-image"
+          media={`(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${r}) and (orientation: portrait)`}
+          href={`/splash/apple-splash-${w * r}x${h * r}.png`}
+        />
+      ))}
+    </>
+  );
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -62,6 +94,9 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <AppleSplashLinks />
+      </head>
       <body className="min-h-full flex flex-col font-sans">
         {children}
         <ServiceWorker />

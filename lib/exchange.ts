@@ -3,7 +3,10 @@
 
 export type Currency = "VES" | "USD" | "EUR" | "USDT";
 
+// Orden de los botones del selector (Bs al final).
 export const CURRENCIES: Currency[] = ["USD", "EUR", "USDT", "VES"];
+// Orden de los resultados del convertidor (Bs primero).
+export const RESULT_ORDER: Currency[] = ["VES", "USD", "EUR", "USDT"];
 
 export const CURRENCY_META: Record<
   Currency,

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CURRENCIES,
+  RESULT_ORDER,
   CURRENCY_META,
   computeSavings,
   convert,
@@ -159,7 +160,7 @@ export default function Dashboard({ initialRates }: { initialRates: Rates }) {
     () => computeSavings(ves, officialRate, usdtRate),
     [ves, officialRate, usdtRate],
   );
-  const targets = CURRENCIES.filter((c) => c !== fromCur);
+  const targets = RESULT_ORDER.filter((c) => c !== fromCur);
 
   const shareText = useMemo(
     () => buildShareText(rates, numeric, fromCur, ves, savings, direction, officialCur),
