@@ -1,6 +1,21 @@
 @import "tailwindcss";
 
+/* El tema lo decide `data-theme` en <html> (ver lib/theme.ts), no el sistema:
+   en varios WebViews de Android `prefers-color-scheme` llega mal. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Oscuro por defecto */
 :root {
+  color-scheme: dark;
+  --background: #0a0b12;
+  --surface: #14161f;
+  --foreground: #f1f5f9;
+  --muted: #94a3b8;
+  --border: #262a38;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
   --background: #f6f7fb;
   --surface: #ffffff;
   --foreground: #0f172a;
@@ -18,16 +33,6 @@
   --font-mono: var(--font-geist-mono), monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0b12;
-    --surface: #14161f;
-    --foreground: #f1f5f9;
-    --muted: #94a3b8;
-    --border: #262a38;
-  }
-}
-
 html {
   scroll-behavior: smooth;
 }
@@ -40,6 +45,9 @@ body {
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
 /* Números tabulares para que las cifras no "bailen" al actualizar */

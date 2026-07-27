@@ -19,6 +19,7 @@ import {
 } from "@/lib/exchange";
 import AnimatedNumber from "@/components/animated-number";
 import ShareButton from "@/components/share-button";
+import ThemeToggle from "@/components/theme-toggle";
 
 const STORAGE_KEY = "dac:input";
 
@@ -275,25 +276,28 @@ function Header({
           </span>
         </p>
       </div>
-      <button
-        onClick={onRefresh}
-        disabled={loading}
-        className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium shadow-sm transition hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-60 dark:hover:text-indigo-400"
-      >
-        <svg
-          className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+      <div className="flex shrink-0 items-center gap-2">
+        <ThemeToggle />
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium shadow-sm transition hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-60 dark:hover:text-indigo-400"
         >
-          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-          <path d="M21 3v6h-6" />
-        </svg>
-        {loading ? "Actualizando" : "Actualizar"}
-      </button>
+          <svg
+            className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+          {loading ? "Actualizando" : "Actualizar"}
+        </button>
+      </div>
     </header>
   );
 }
