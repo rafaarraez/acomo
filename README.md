@@ -125,14 +125,19 @@ Abre <http://localhost:3000>. No hace falta ninguna API key: las dos fuentes son
 
 ### Variables de entorno
 
-Solo una, y es opcional:
+Dos, y las dos opcionales:
 
 ```bash
 # .env.local
 NEXT_PUBLIC_SITE_URL=https://tudominio.com
+NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
 ```
 
-Sin ella la imagen de preview al compartir apunta a `localhost`. **Defínela al desplegar.**
+- `NEXT_PUBLIC_SITE_URL` — sin ella la imagen de preview al compartir apunta a
+  `localhost`. **Defínela al desplegar.**
+- `NEXT_PUBLIC_GA_ID` — ID de medición de Google Analytics 4. Si no está definida no
+  se carga ningún script de Analytics, así que en local no cuentas tus propias visitas.
+  Defínela solo en el entorno de producción.
 
 ---
 
@@ -209,7 +214,8 @@ con ícono, splash screen y funcionando sin conexión:
 ## ☁️ Desplegar
 
 Pensada para [Vercel](https://vercel.com/new): importa el repo, define
-`NEXT_PUBLIC_SITE_URL` y listo. La página es `force-dynamic` porque las tasas cambian
+`NEXT_PUBLIC_SITE_URL` (y `NEXT_PUBLIC_GA_ID` si quieres métricas) y listo.
+La página es `force-dynamic` porque las tasas cambian
 durante el día, así que necesita un runtime de Node — no funciona como export estático.
 
 > [!IMPORTANT]

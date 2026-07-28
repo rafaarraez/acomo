@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 import ServiceWorker from "@/components/service-worker";
 import { DEFAULT_THEME, THEME_COLORS, THEME_INIT_SCRIPT } from "@/lib/theme";
@@ -16,6 +17,10 @@ const geistMono = Geist_Mono({
 
 const title = "¿A Cómo?";
 const description = "¿A cómo está hoy? Calcula tu cambio y compártelo en un toque.";
+
+// ID de medición de GA4 (G-XXXXXXXXXX). Si no está definido no se carga ningún
+// script de Analytics: así en local no ensuciamos las métricas de producción.
+const gaId = process.env.NEXT_PUBLIC_GA_ID;
 
 export const metadata: Metadata = {
   // Al desplegar, define NEXT_PUBLIC_SITE_URL (p. ej. https://tudominio.com)
@@ -105,6 +110,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col font-sans">
         {children}
         <ServiceWorker />
+        {gaId ? <GoogleAnalytics gaId={gaId} /> : null}
       </body>
     </html>
   );
