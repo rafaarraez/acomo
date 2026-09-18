@@ -104,6 +104,11 @@ export default function RootLayout({
     >
       <head>
         <meta name="theme-color" content={THEME_COLORS[DEFAULT_THEME]} />
+        {/* Next 16 solo emite el `mobile-web-app-capable` estandarizado, pero
+            WebKit no lo implementa: sin el meta con prefijo apple, iOS ignora
+            por completo las apple-touch-startup-image de abajo y arranca en
+            negro. Android no lo necesita (saca su splash del manifest). */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <AppleSplashLinks />
       </head>
