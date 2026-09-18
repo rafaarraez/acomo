@@ -23,15 +23,48 @@ import ThemeToggle from "@/components/theme-toggle";
 
 const STORAGE_KEY = "dac:input";
 
-/** Parseo estilo Venezuela: el punto es separador de miles, la coma decimal. */
+/** Deja solo dígitos y separadores: el resto no pinta nada en un monto. */
+function sanitizeAmount(s: string): string {
+  return s.replace(/[^\d.,]/g, "");
+}
+
+/**
+ * Parseo estilo Venezuela (punto = miles, coma = decimal) pero tolerante al
+ * punto como decimal: el teclado numérico de los teléfonos no trae coma.
+ * Manda el último separador, salvo que venga seguido de 3 dígitos —ahí es
+ * de miles—. Así "10.50" es 10,5 y "1.000" sigue siendo mil.
+ */
 function parseAmount(s: string): number {
-  if (!s) return 0;
-  const t = s
-    .replace(/[^\d.,]/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  const n = Number(t);
+  const t = sanitizeAmount(s);
+  if (!t) return 0;
+  const last = Math.max(t.lastIndexOf(","), t.lastIndexOf("."));
+  const decimals = last === -1 ? 0 : t.length - last - 1;
+  const isDecimal = last !== -1 && decimals > 0 && decimals < 3;
+  const int = (isDecimal ? t.slice(0, last) : t).replace(/[.,]/g, "");
+  const frac = isDecimal ? t.slice(last + 1) : "";
+  const n = Number(frac ? `${int || "0"}.${frac}` : int);
   return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+/** Pistas de moneda dentro de un texto pegado. USDT va primero porque "usdt"
+ *  contiene "usd". */
+const CURRENCY_HINTS: { re: RegExp; cur: Currency }[] = [
+  { re: /usdt|tether|₮/i, cur: "USDT" },
+  { re: /€|\beur\b|euros?\b/i, cur: "EUR" },
+  { re: /\$|\busd\b|d[óo]lar/i, cur: "USD" },
+  { re: /\bbs\.?s?\b|\bves\b|bol[íi]var/i, cur: "VES" },
+];
+
+/**
+ * Lo que se pega rara vez viene limpio: "$400", "Bs. 500,60", "600 USDT".
+ * Saca el primer número del texto y, si el texto lo dice, también la moneda.
+ */
+function parsePasted(
+  text: string,
+): { amount: string; cur: Currency | null } | null {
+  const amount = (text.match(/\d[\d.,]*/)?.[0] ?? "").replace(/[.,]+$/, "");
+  if (!amount) return null;
+  return { amount, cur: CURRENCY_HINTS.find((h) => h.re.test(text))?.cur ?? null };
 }
 
 function fmtCaracasTime(iso: string): string {
@@ -63,8 +96,12 @@ export default function Dashboard({ initialRates }: { initialRates: Rates }) {
 
   // La tasa USDT se busca para el tamaño real de TU operación: la referencia
   // que se envía a Binance es el monto que estás cambiando, en bolívares.
+  // El intervalo y el listener de visibilidad no deben recrearse en cada tecla,
+  // así que leen el monto vigente por ref en vez de tenerlo como dependencia.
   const currentRef = useRef(0);
-  currentRef.current = Math.round(ves) || 0;
+  useEffect(() => {
+    currentRef.current = Math.round(ves) || 0;
+  }, [ves]);
 
   const fetchRates = useCallback(async (refVes: number) => {
     setLoading(true);
@@ -122,6 +159,9 @@ export default function Dashboard({ initialRates }: { initialRates: Rates }) {
   }, [fetchRates]);
 
   // Recordar el último cálculo: cargar al abrir…
+  // Va en un efecto (y no en el initializer de useState) porque el servidor no
+  // tiene localStorage: leerlo durante el render rompería la hidratación.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -135,6 +175,7 @@ export default function Dashboard({ initialRates }: { initialRates: Rates }) {
       /* localStorage no disponible o dato corrupto: usamos los valores por defecto */
     }
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // …y guardar cuando cambia (saltando el primer render para no pisar lo cargado).
   const firstSave = useRef(true);
@@ -463,6 +504,30 @@ function Converter({
 }) {
   const meta = CURRENCY_META[fromCur];
   const [copied, setCopied] = useState<Currency | null>(null);
+  const [pasteHint, setPasteHint] = useState<string | null>(null);
+
+  function applyPasted(text: string): boolean {
+    const parsed = parsePasted(text);
+    if (!parsed) return false;
+    setAmount(parsed.amount);
+    if (parsed.cur) setFromCur(parsed.cur);
+    return true;
+  }
+
+  function hint(msg: string) {
+    setPasteHint(msg);
+    setTimeout(() => setPasteHint(null), 2200);
+  }
+
+  async function pasteFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!applyPasted(text)) hint("No hay ningún monto en el portapapeles");
+    } catch {
+      /* Firefox y los contextos no seguros no dejan leer el portapapeles */
+      hint("Tu navegador no deja leer el portapapeles: pega con Ctrl+V");
+    }
+  }
 
   async function copyValue(c: Currency, val: number) {
     const digits = fmtCur(val, c); // lo que se ve, sin símbolo
@@ -512,12 +577,30 @@ function Converter({
           <span className="text-lg font-semibold text-muted">{meta.symbol}</span>
           <input
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => setAmount(sanitizeAmount(e.target.value))}
+            onPaste={(e) => {
+              const text = e.clipboardData.getData("text");
+              // Si ya viene limpio dejamos el pegado normal (inserta donde está
+              // el cursor); solo tomamos el control si hay que sanearlo.
+              if (text.trim() === sanitizeAmount(text.trim())) return;
+              if (applyPasted(text)) e.preventDefault();
+            }}
             inputMode="decimal"
             placeholder="0"
             className="tnum w-full bg-transparent text-2xl font-bold outline-none placeholder:text-muted/50"
           />
+          <button
+            type="button"
+            onClick={pasteFromClipboard}
+            title="Pegar un monto del portapapeles"
+            className="shrink-0 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted transition hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300"
+          >
+            Pegar
+          </button>
         </div>
+        {pasteHint && (
+          <p className="mt-1.5 text-xs text-muted">{pasteHint}</p>
+        )}
       </div>
 
       {/* Resultados en las otras monedas (toca para copiar) */}

@@ -201,7 +201,7 @@ export async function getRates(refOverride?: number): Promise<Rates> {
 
   let usdtSell = sell.status === "fulfilled" ? sell.value.avg : 0;
   let usdtBuy = buy.status === "fulfilled" ? buy.value.avg : 0;
-  let usdtSampleSize =
+  const usdtSampleSize =
     (sell.status === "fulfilled" ? sell.value.count : 0) +
     (buy.status === "fulfilled" ? buy.value.count : 0);
   let usdtSource: Rates["usdtSource"] = "binance";
