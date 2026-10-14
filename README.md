@@ -32,7 +32,7 @@ importa: *cuánto te ahorras pagando en USDT en vez de a tasa oficial.*
 |---|---|
 | 💱 **Convertidor de 4 monedas** | Bs, USD, EUR y USDT en cualquier dirección. Toca un resultado y se copia al portapapeles. |
 | 💰 **Calculadora de ahorro** | El corazón de la app: compara cubrir un monto a tasa BCV vs. con USDT y te dice el ahorro en % y en plata. |
-| 🔄 **Venta y compra por separado** | No usa un promedio: si vendes USDT aplica el precio de venta; si compras, el de compra. |
+| 🔄 **Venta y compra por separado** | No usa un promedio: si vendes USDT aplica el precio de venta; si compras, el de compra. El convertidor usa la misma tasa, así que las cifras cuadran en toda la página. |
 | 📡 **Tasas frescas** | Auto-refresco cada 90 s **solo con la pestaña visible**, más un botón de "Actualizar". |
 | 🎯 **Tasa según tu monto** | La consulta a Binance se ancla al tamaño real de tu operación: la tasa de 100 $ no es la de 10.000 $. |
 | 📲 **Comparte en un toque** | Arma el texto listo para WhatsApp con el menú nativo (o abre WhatsApp Web si no está disponible). |
@@ -44,24 +44,26 @@ importa: *cuánto te ahorras pagando en USDT en vez de a tasa oficial.*
 
 ## 🧮 Cómo se calcula el ahorro
 
-Todo pasa por bolívares. Dado un monto en Bs, la app compara las dos rutas para cubrirlo:
+Todo pasa por bolívares. Dado un monto en Bs, la app compara pagarlo en divisas
+a tasa BCV contra conseguir esos Bs vendiendo USDT:
 
 ```
-costo a tasa oficial  =  Bs ÷ tasa BCV
-costo en USDT         =  Bs ÷ tasa USDT (venta o compra, según la operación)
-ahorro %              =  (costo oficial − costo USDT) ÷ costo oficial × 100
+en divisas (tasa BCV) =  Bs ÷ tasa BCV
+en USDT               =  Bs ÷ tasa USDT (venta o compra, según la operación)
+ahorro %              =  (divisas − USDT) ÷ divisas × 100
 ```
 
 **Ejemplo**: una cuenta de **1.160 Bs**, con BCV = 100 Bs/$ y USDT venta = 116 Bs.
 
 | Ruta | Te cuesta |
 |---|---|
-| Pagando con Dólar BCV | **$ 11,60** |
+| Pagando en divisas a tasa BCV | **$ 11,60** |
 | Vendiendo USDT | **₮ 10,00** |
-| | 👉 **ahorras 13,79 %** ($ 1,60) |
+| | 👉 **ahorras 13,79 %** (₮ 1,60) |
 
-Cada USDT rinde como **$ 1,16** del BCV. Si el monto está en euros, la comparación
-se hace contra el **Euro BCV** en vez del dólar.
+Cada USDT rinde como **$ 1,16** del BCV. La comparación es siempre contra el
+**dólar** BCV, aunque el monto esté en euros: el USDT vale un dólar, así que
+comparar 1 € con 1 ₮ mostraría un ahorro que no existe.
 
 La lógica vive completa y sin dependencias en [`lib/exchange.ts`](lib/exchange.ts)
 (`computeSavings`), así que es fácil de leer y de probar.

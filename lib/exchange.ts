@@ -67,41 +67,6 @@ export interface Rates {
   errors: string[];
 }
 
-/** Devuelve la tasa (VES por 1 unidad) de una moneda. Para VES es 1. */
-export function rateOf(cur: Currency, rates: Rates): number {
-  switch (cur) {
-    case "VES":
-      return 1;
-    case "USD":
-      return rates.bcvUsd;
-    case "EUR":
-      return rates.bcvEur;
-    case "USDT":
-      return rates.usdtAvg;
-  }
-}
-
-/** Convierte un monto de una moneda a su valor en bolívares. */
-export function toVes(amount: number, cur: Currency, rates: Rates): number {
-  return amount * rateOf(cur, rates);
-}
-
-/** Convierte un monto en bolívares a la moneda destino. */
-export function fromVes(ves: number, cur: Currency, rates: Rates): number {
-  const r = rateOf(cur, rates);
-  return r === 0 ? 0 : ves / r;
-}
-
-/** Convierte directamente entre dos monedas. */
-export function convert(
-  amount: number,
-  from: Currency,
-  to: Currency,
-  rates: Rates,
-): number {
-  return fromVes(toVes(amount, from, rates), to, rates);
-}
-
 /** Operación: vendes USDT (recibes Bs) o compras USDT (pagas Bs). */
 export type Direction = "sell" | "buy";
 
@@ -116,53 +81,103 @@ export function usdtRateFor(dir: Direction, rates: Rates): number {
   return side || rates.usdtAvg;
 }
 
+/**
+ * Devuelve la tasa (VES por 1 unidad) de una moneda. Para VES es 1.
+ * El USDT va a la tasa de la operación si se indica (así el convertidor y el
+ * panel de ahorro dan las mismas cifras); si no, al promedio.
+ */
+export function rateOf(cur: Currency, rates: Rates, dir?: Direction): number {
+  switch (cur) {
+    case "VES":
+      return 1;
+    case "USD":
+      return rates.bcvUsd;
+    case "EUR":
+      return rates.bcvEur;
+    case "USDT":
+      return dir ? usdtRateFor(dir, rates) : rates.usdtAvg;
+  }
+}
+
+/** Convierte un monto de una moneda a su valor en bolívares. */
+export function toVes(
+  amount: number,
+  cur: Currency,
+  rates: Rates,
+  dir?: Direction,
+): number {
+  return amount * rateOf(cur, rates, dir);
+}
+
+/** Convierte un monto en bolívares a la moneda destino. */
+export function fromVes(
+  ves: number,
+  cur: Currency,
+  rates: Rates,
+  dir?: Direction,
+): number {
+  const r = rateOf(cur, rates, dir);
+  return r === 0 ? 0 : ves / r;
+}
+
+/** Convierte directamente entre dos monedas. */
+export function convert(
+  amount: number,
+  from: Currency,
+  to: Currency,
+  rates: Rates,
+  dir?: Direction,
+): number {
+  return fromVes(toVes(amount, from, rates, dir), to, rates, dir);
+}
+
 export interface Savings {
+  /** Bolívares de la operación. */
   ves: number;
-  /** Tasa USDT (VES/USDT) usada en este cálculo. */
+  /** Tasa USDT (VES/USDT) usada: la de venta o la de compra. */
   usdtRate: number;
-  /** Tasa oficial BCV usada (USD o EUR según el input). */
-  officialRate: number;
-  /** Cuánto cuesta el monto en la moneda oficial (USD o EUR) a tasa BCV. */
-  officialCost: number;
-  /** Cuántos USDT equivalen a ese mismo monto en Bs (a la tasa direccional). */
-  costUsdt: number;
-  /** Diferencia de unidades a favor de USDT (moneda oficial − USDT). */
-  savingAbs: number;
-  /** Ahorro porcentual respecto a pagar a tasa BCV. */
+  /** Tasa del dólar BCV usada. */
+  bcvRate: number;
+  /** USDT que se venden o compran por esos bolívares. */
+  usdt: number;
+  /** Esos mismos bolívares en dólares a tasa BCV. */
+  usd: number;
+  /** usd − usdt: lo que te ahorras (o dejas de recibir) frente a la tasa BCV. */
+  diff: number;
+  /** diff sobre usd: cuánto menos pagas vendiendo USDT que en divisas. */
   savingPct: number;
-  /** Cuánto rinde 1 USDT en unidades de la moneda oficial (ej. 1.16). */
+  /** Cuánto está el USDT por encima del dólar BCV. */
+  gapPct: number;
+  /** Cuántos dólares BCV vale 1 USDT (ej. 1,15). */
   premium: number;
-  /** true si la tasa USDT supera la del BCV. */
-  usdtIsCheaper: boolean;
 }
 
 /**
- * El corazón de la app: dado un valor en bolívares, compara cubrirlo a tasa
- * BCV (en USD o EUR, según lo que se esté valorando) vs. con USDT, usando la
- * tasa que corresponde a la operación (venta o compra), no el promedio.
+ * El corazón de la app: dado un monto en bolívares, compara moverlo con USDT
+ * (a la tasa de la operación, no al promedio) contra el dólar a tasa BCV.
+ * Siempre contra el dólar, aunque el monto venga en euros: el USDT vale un
+ * dólar, así que comparar 1 € con 1 ₮ daría un ahorro que no existe.
  */
 export function computeSavings(
   ves: number,
-  officialRate: number,
+  bcvRate: number,
   usdtRate: number,
 ): Savings {
-  const oRate = officialRate || 0;
+  const bRate = bcvRate || 0;
   const uRate = usdtRate || 0;
-  const officialCost = oRate ? ves / oRate : 0;
-  const costUsdt = uRate ? ves / uRate : 0;
-  const savingAbs = officialCost - costUsdt;
-  const savingPct = officialCost ? (savingAbs / officialCost) * 100 : 0;
-  const premium = oRate ? uRate / oRate : 1;
+  const usd = bRate ? ves / bRate : 0;
+  const usdt = uRate ? ves / uRate : 0;
+  const diff = usd - usdt;
   return {
     ves,
     usdtRate: uRate,
-    officialRate: oRate,
-    officialCost,
-    costUsdt,
-    savingAbs,
-    savingPct,
-    premium,
-    usdtIsCheaper: uRate > oRate,
+    bcvRate: bRate,
+    usdt,
+    usd,
+    diff,
+    savingPct: usd ? (diff / usd) * 100 : 0,
+    gapPct: bRate ? (uRate / bRate - 1) * 100 : 0,
+    premium: bRate ? uRate / bRate : 1,
   };
 }
 

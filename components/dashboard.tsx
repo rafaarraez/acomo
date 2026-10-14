@@ -16,6 +16,7 @@ import {
   type Currency,
   type Direction,
   type Rates,
+  type Savings,
 } from "@/lib/exchange";
 import AnimatedNumber from "@/components/animated-number";
 import ShareButton from "@/components/share-button";
@@ -89,9 +90,11 @@ export default function Dashboard({ initialRates }: { initialRates: Rates }) {
   const [direction, setDirection] = useState<Direction>("sell");
 
   const numeric = parseAmount(amount);
+  // Todo el USDT de la página va a la tasa de la operación elegida (venta o
+  // compra): si arriba escribes ₮180, abajo tienen que salir ₮180.
   const ves = useMemo(
-    () => toVes(numeric, fromCur, rates),
-    [numeric, fromCur, rates],
+    () => toVes(numeric, fromCur, rates, direction),
+    [numeric, fromCur, rates, direction],
   );
 
   // La tasa USDT se busca para el tamaño real de TU operación: la referencia
@@ -194,19 +197,16 @@ export default function Dashboard({ initialRates }: { initialRates: Rates }) {
     }
   }, [amount, fromCur, direction]);
 
-  // La comparación oficial usa EUR si el input es en euros; si no, USD.
-  const officialCur: Currency = fromCur === "EUR" ? "EUR" : "USD";
-  const officialRate = officialCur === "EUR" ? rates.bcvEur : rates.bcvUsd;
   const usdtRate = usdtRateFor(direction, rates);
   const savings = useMemo(
-    () => computeSavings(ves, officialRate, usdtRate),
-    [ves, officialRate, usdtRate],
+    () => computeSavings(ves, rates.bcvUsd, usdtRate),
+    [ves, rates.bcvUsd, usdtRate],
   );
   const targets = RESULT_ORDER.filter((c) => c !== fromCur);
 
   const shareText = useMemo(
-    () => buildShareText(rates, numeric, fromCur, ves, savings, direction, officialCur),
-    [rates, numeric, fromCur, ves, savings, direction, officialCur],
+    () => buildShareText(rates, numeric, fromCur, savings, direction),
+    [rates, numeric, fromCur, savings, direction],
   );
 
   return (
@@ -224,7 +224,7 @@ export default function Dashboard({ initialRates }: { initialRates: Rates }) {
         </div>
       )}
 
-      <RatesStrip rates={rates} />
+      <RatesStrip rates={rates} direction={direction} />
 
       <Converter
         amount={amount}
@@ -234,16 +234,15 @@ export default function Dashboard({ initialRates }: { initialRates: Rates }) {
         numeric={numeric}
         rates={rates}
         targets={targets}
+        direction={direction}
       />
 
       <SavingsCard
-        ves={ves}
         numeric={numeric}
         savings={savings}
         rates={rates}
         direction={direction}
         setDirection={setDirection}
-        officialCur={officialCur}
       />
 
       <ShareButton text={shareText} />
@@ -258,13 +257,10 @@ function buildShareText(
   rates: Rates,
   numeric: number,
   fromCur: Currency,
-  ves: number,
-  savings: ReturnType<typeof computeSavings>,
+  savings: Savings,
   direction: Direction,
-  officialCur: Currency,
 ): string {
   const m = CURRENCY_META[fromCur];
-  const om = CURRENCY_META[officialCur];
   const lines: string[] = [
     "👀 ¿A Cómo? — el cambio de hoy",
     `BCV: Bs ${fmtRate(rates.bcvUsd)} · USDT: vende ${fmtRate(
@@ -276,13 +272,13 @@ function buildShareText(
       fromCur === "VES"
         ? `Bs ${fmtVes(numeric)}`
         : `${m.symbol}${fmtCur(numeric, fromCur)} ${m.short}`;
-    lines.push("", `${left} = Bs ${fmtVes(ves)}`);
-    if (direction === "sell" && savings.usdtIsCheaper) {
+    lines.push("", `${left} = Bs ${fmtVes(savings.ves)}`);
+    if (direction === "sell" && savings.diff > 0) {
       lines.push(
-        `👉 En USDT: ₮${fmtCur(savings.costUsdt, "USDT")} en vez de ${om.symbol}${fmtCur(
-          savings.officialCost,
-          officialCur,
-        )} — ahorras ${fmtPct(savings.savingPct)}`,
+        `👉 Vendiendo USDT: ₮${fmtCur(savings.usdt, "USDT")} en vez de $${fmtCur(
+          savings.usd,
+          "USD",
+        )} en divisas — ahorras ${fmtPct(savings.savingPct)}`,
       );
     }
   }
@@ -345,12 +341,21 @@ function Header({
 
 /* -------------------------------------------------------------------------- */
 
-function RatesStrip({ rates }: { rates: Rates }) {
+function RatesStrip({
+  rates,
+  direction,
+}: {
+  rates: Rates;
+  direction: Direction;
+}) {
+  // Brecha del lado que se está usando, para que cuadre con el panel de abajo.
   const premiumPct = rates.bcvUsd
-    ? (rates.usdtAvg / rates.bcvUsd - 1) * 100
+    ? (usdtRateFor(direction, rates) / rates.bcvUsd - 1) * 100
     : 0;
   return (
-    <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+    // La tarjeta USDT lleva dos cifras lado a lado: va más ancha para que
+    // quepan tasas de cuatro dígitos (1.006,82) sin salirse.
+    <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_1.4fr]">
       <RateCard
         emoji="🇺🇸"
         title="Dólar BCV"
@@ -365,7 +370,7 @@ function RatesStrip({ rates }: { rates: Rates }) {
         caption="Tasa oficial · Banco Central"
         accent="violet"
       />
-      <UsdtCard rates={rates} premiumPct={premiumPct} />
+      <UsdtCard rates={rates} premiumPct={premiumPct} direction={direction} />
     </section>
   );
 }
@@ -373,11 +378,18 @@ function RatesStrip({ rates }: { rates: Rates }) {
 function UsdtCard({
   rates,
   premiumPct,
+  direction,
 }: {
   rates: Rates;
   premiumPct: number;
+  direction: Direction;
 }) {
   const binance = rates.usdtSource === "binance";
+  // Marca el lado que usa el resto de la página (según "Vendo / Compro USDT").
+  const sideLabel = (side: Direction) =>
+    `text-[11px] font-medium ${
+      side === direction ? "text-emerald-600 dark:text-emerald-300" : "text-muted"
+    }`;
   return (
     <div
       className={`relative overflow-hidden rounded-2xl border border-border bg-surface bg-gradient-to-br p-4 shadow-sm ${ACCENTS.emerald}`}
@@ -398,16 +410,18 @@ function UsdtCard({
 
       {binance ? (
         <>
-          <div className="mt-2 flex gap-4">
+          {/* flex-wrap: si algún día no caben (tasas de cinco dígitos), la
+              compra baja de línea en vez de cortarse. */}
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
             <div>
-              <p className="text-[11px] font-medium text-muted">Venta</p>
-              <p className="tnum text-xl font-bold text-foreground">
+              <p className={sideLabel("sell")}>Venta</p>
+              <p className="tnum whitespace-nowrap text-xl font-bold text-foreground">
                 <AnimatedNumber value={rates.usdtSell} format={fmtRate} />
               </p>
             </div>
-            <div className="border-l border-border pl-4">
-              <p className="text-[11px] font-medium text-muted">Compra</p>
-              <p className="tnum text-xl font-bold text-foreground">
+            <div className="border-l border-border pl-3">
+              <p className={sideLabel("buy")}>Compra</p>
+              <p className="tnum whitespace-nowrap text-xl font-bold text-foreground">
                 <AnimatedNumber value={rates.usdtBuy} format={fmtRate} />
               </p>
             </div>
@@ -493,6 +507,7 @@ function Converter({
   numeric,
   rates,
   targets,
+  direction,
 }: {
   amount: string;
   setAmount: (s: string) => void;
@@ -501,6 +516,7 @@ function Converter({
   numeric: number;
   rates: Rates;
   targets: Currency[];
+  direction: Direction;
 }) {
   const meta = CURRENCY_META[fromCur];
   const [copied, setCopied] = useState<Currency | null>(null);
@@ -542,7 +558,13 @@ function Converter({
 
   return (
     <section className="mt-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
-      <h2 className="text-sm font-semibold text-muted">Convertidor</h2>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold text-muted">Convertidor</h2>
+        <span className="tnum text-xs text-muted">
+          USDT a {direction === "sell" ? "venta" : "compra"}{" "}
+          {fmtRate(usdtRateFor(direction, rates))}
+        </span>
+      </div>
 
       {/* Selector de moneda de entrada */}
       <div className="mt-3 grid grid-cols-4 gap-2">
@@ -607,7 +629,7 @@ function Converter({
       <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
         {targets.map((c) => {
           const m = CURRENCY_META[c];
-          const val = convert(numeric, fromCur, c, rates);
+          const val = convert(numeric, fromCur, c, rates, direction);
           const isCopied = copied === c;
           return (
             <button
@@ -647,46 +669,59 @@ function Converter({
 /* -------------------------------------------------------------------------- */
 
 function SavingsCard({
-  ves,
   numeric,
   savings,
   rates,
   direction,
   setDirection,
-  officialCur,
 }: {
-  ves: number;
   numeric: number;
-  savings: ReturnType<typeof computeSavings>;
+  savings: Savings;
   rates: Rates;
   direction: Direction;
   setDirection: (d: Direction) => void;
-  officialCur: Currency;
 }) {
-  const empty = numeric <= 0 || !savings.officialRate || !savings.usdtRate;
-  const sideLabel = direction === "sell" ? "venta" : "compra";
-  const overBcvPct = (savings.premium - 1) * 100;
-  const om = CURRENCY_META[officialCur]; // moneda oficial: Dólar BCV o Euro BCV
-  const usdtSub = rates.usdtSource === "paralelo" ? "≈ paralelo" : "Binance P2P";
+  const empty = numeric <= 0 || !savings.bcvRate || !savings.usdtRate;
+  const sell = direction === "sell";
+  const source = rates.usdtSource === "paralelo" ? "≈ paralelo" : "Binance P2P";
+  const usd = `$${fmtCur(savings.usd, "USD")}`;
+  const saves = savings.diff >= 0;
+
+  // Las dos puntas de la operación: al vender entregas USDT y recibes Bs; al
+  // comprar, al revés. El monto que escribiste arriba sale tal cual en una.
+  const usdtTile = (
+    <TradeTile
+      label={sell ? "Vendes" : "Recibes"}
+      amount={`₮${fmtCur(savings.usdt, "USDT")}`}
+      sub={`a ${fmtRate(savings.usdtRate)} Bs c/u · ${source}`}
+      highlight
+    />
+  );
+  const vesTile = (
+    <TradeTile
+      label={sell ? "Recibes" : "Pagas"}
+      amount={fmtVes(savings.ves)}
+      unit="Bs"
+      sub={`= ${usd} a tasa BCV`}
+    />
+  );
 
   return (
     <section className="mt-4 overflow-hidden rounded-2xl border border-emerald-300/50 bg-gradient-to-br from-emerald-50 to-surface p-5 shadow-sm dark:border-emerald-500/20 dark:from-emerald-950/40 dark:to-surface">
       <h2 className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-        {direction === "sell"
-          ? `💰 ¿Cuánto ahorras pagando en USDT?`
-          : "💱 Cambiando bolívares a USDT"}
+        💰 USDT vs. dólar BCV
       </h2>
 
       {/* Toggle de dirección */}
       <div className="mt-3 grid grid-cols-2 gap-2">
         <DirButton
-          active={direction === "sell"}
+          active={sell}
           onClick={() => setDirection("sell")}
           title="Vendo USDT"
           sub="Recibo bolívares"
         />
         <DirButton
-          active={direction === "buy"}
+          active={!sell}
           onClick={() => setDirection("buy")}
           title="Compro USDT"
           sub="Pago con bolívares"
@@ -697,101 +732,54 @@ function SavingsCard({
         <p className="mt-3 text-sm text-muted">
           Escribe un monto arriba para ver el cálculo.
         </p>
-      ) : direction === "sell" ? (
-        <>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <RouteTile
-              label={`Pagando con ${om.label}`}
-              amount={`${om.symbol}${fmtCur(savings.officialCost, officialCur)}`}
-              sub="Tasa oficial"
-              dim
-            />
-            <RouteTile
-              label={`Vendiendo USDT (${fmtRate(savings.usdtRate)})`}
-              amount={`₮${fmtCur(savings.costUsdt, "USDT")}`}
-              sub={usdtSub}
-              highlight
-            />
-          </div>
-
-          <div className="mt-4 flex items-end justify-between rounded-xl bg-emerald-500/10 px-4 py-3">
-            <div>
-              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                Ahorras
-              </p>
-              <p className="tnum text-3xl font-extrabold text-emerald-600 dark:text-emerald-300">
-                {fmtPct(savings.savingPct)}
-              </p>
-            </div>
-            <p className="tnum text-right text-lg font-bold text-emerald-700 dark:text-emerald-200">
-              {om.symbol}
-              {fmtCur(savings.savingAbs, officialCur)}
-              <span className="block text-xs font-normal text-emerald-600/80 dark:text-emerald-300/70">
-                menos que a tasa BCV
-              </span>
-            </p>
-          </div>
-
-          <p className="mt-3 text-sm leading-relaxed text-foreground/80">
-            Para cubrir <b className="tnum">{fmtVes(ves)} Bs</b> vendes{" "}
-            <b className="tnum text-emerald-700 dark:text-emerald-300">
-              ₮{fmtCur(savings.costUsdt, "USDT")}
-            </b>{" "}
-            (a {sideLabel} {fmtRate(savings.usdtRate)}), en vez de gastar{" "}
-            <b className="tnum">
-              {om.symbol}
-              {fmtCur(savings.officialCost, officialCur)}
-            </b>{" "}
-            en {om.label}. Cada USDT rinde como{" "}
-            <b className="tnum">
-              {om.symbol}
-              {fmtCur(savings.premium, officialCur)}
-            </b>{" "}
-            del BCV.
-          </p>
-        </>
       ) : (
         <>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <RouteTile
-              label="Valor a tasa BCV"
-              amount={`${om.symbol}${fmtCur(savings.officialCost, officialCur)}`}
-              sub={`Referencia · ${om.label}`}
-              dim
-            />
-            <RouteTile
-              label={`Comprando USDT (${fmtRate(savings.usdtRate)})`}
-              amount={`₮${fmtCur(savings.costUsdt, "USDT")}`}
-              sub={usdtSub}
-              highlight
-            />
+            {sell ? usdtTile : vesTile}
+            {sell ? vesTile : usdtTile}
           </div>
 
-          <div className="mt-4 rounded-xl bg-emerald-500/10 px-4 py-3">
-            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-              USDT respecto al {om.label}
-            </p>
-            <p className="tnum text-2xl font-extrabold text-emerald-600 dark:text-emerald-300">
-              {fmtRate(savings.usdtRate)} Bs{" "}
-              <span className="text-sm font-semibold">
-                (+{fmtPct(overBcvPct)})
+          <div className="mt-4 flex items-end justify-between gap-3 rounded-xl bg-emerald-500/10 px-4 py-3">
+            <div>
+              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                {sell
+                  ? saves
+                    ? "Ahorras"
+                    : "Pagas de más"
+                  : "USDT sobre el dólar BCV"}
+              </p>
+              <p className="tnum whitespace-nowrap text-3xl font-extrabold text-emerald-600 dark:text-emerald-300">
+                {sell
+                  ? fmtPct(Math.abs(savings.savingPct))
+                  : `${savings.gapPct >= 0 ? "+" : "−"}${fmtPct(Math.abs(savings.gapPct))}`}
+              </p>
+            </div>
+            <p className="tnum text-right text-lg font-bold text-emerald-700 dark:text-emerald-200">
+              {sell
+                ? `₮${fmtCur(Math.abs(savings.diff), "USDT")}`
+                : `${fmtRate(savings.usdtRate)} Bs`}
+              <span className="block text-xs font-normal text-emerald-600/80 dark:text-emerald-300/70">
+                {sell
+                  ? `${saves ? "menos" : "más"} que pagar ${usd} en divisas`
+                  : `vs ${fmtRate(savings.bcvRate)} Bs del BCV`}
               </span>
             </p>
           </div>
 
           <p className="mt-3 text-sm leading-relaxed text-foreground/80">
-            Con <b className="tnum">{fmtVes(ves)} Bs</b> compras{" "}
-            <b className="tnum text-emerald-700 dark:text-emerald-300">
-              ₮{fmtCur(savings.costUsdt, "USDT")}
-            </b>{" "}
-            (a {sideLabel} {fmtRate(savings.usdtRate)}). A tasa BCV esos
-            bolívares equivalen a{" "}
-            <b className="tnum">
-              {om.symbol}
-              {fmtCur(savings.officialCost, officialCur)}
-            </b>
-            : el USDT está <b className="tnum">{fmtPct(overBcvPct)}</b> por
-            encima del {om.label}.
+            {sell ? (
+              <>
+                Cada USDT que vendes rinde como{" "}
+                <b className="tnum">${fmtCur(savings.premium, "USD")}</b> a tasa
+                BCV: por eso te alcanza con menos que pagando en divisas.
+              </>
+            ) : (
+              <>
+                Cada USDT que compras te cuesta lo que{" "}
+                <b className="tnum">${fmtCur(savings.premium, "USD")}</b> a tasa
+                BCV.
+              </>
+            )}
           </p>
         </>
       )}
@@ -831,36 +819,37 @@ function DirButton({
   );
 }
 
-function RouteTile({
+function TradeTile({
   label,
   amount,
+  unit,
   sub,
   highlight,
-  dim,
 }: {
   label: string;
   amount: string;
+  unit?: string;
   sub: string;
   highlight?: boolean;
-  dim?: boolean;
 }) {
   return (
     <div
-      className={`rounded-xl border p-3 ${
+      className={`min-w-0 rounded-xl border p-3 ${
         highlight
           ? "border-emerald-400 bg-emerald-500/10"
           : "border-border bg-background"
-      } ${dim ? "opacity-80" : ""}`}
+      }`}
     >
       <p className="text-xs text-muted">{label}</p>
       <p
-        className={`tnum mt-1 text-xl font-bold ${
+        className={`tnum mt-1 flex flex-wrap items-baseline gap-x-1 text-lg font-bold sm:text-xl ${
           highlight ? "text-emerald-600 dark:text-emerald-300" : ""
         }`}
       >
-        {amount}
+        <span className="whitespace-nowrap">{amount}</span>
+        {unit && <span className="text-sm font-semibold text-muted">{unit}</span>}
       </p>
-      <p className="text-[11px] text-muted">{sub}</p>
+      <p className="tnum text-[11px] text-muted">{sub}</p>
     </div>
   );
 }
