@@ -414,13 +414,13 @@ function UsdtCard({
               compra baja de línea en vez de cortarse. */}
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
             <div>
-              <p className={sideLabel("sell")}>Venta</p>
+              <p className={sideLabel("sell")}>Mejor venta</p>
               <p className="tnum whitespace-nowrap text-xl font-bold text-foreground">
                 <AnimatedNumber value={rates.usdtSell} format={fmtRate} />
               </p>
             </div>
             <div className="border-l border-border pl-3">
-              <p className={sideLabel("buy")}>Compra</p>
+              <p className={sideLabel("buy")}>Mejor compra</p>
               <p className="tnum whitespace-nowrap text-xl font-bold text-foreground">
                 <AnimatedNumber value={rates.usdtBuy} format={fmtRate} />
               </p>
@@ -561,7 +561,7 @@ function Converter({
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold text-muted">Convertidor</h2>
         <span className="tnum text-xs text-muted">
-          USDT a {direction === "sell" ? "venta" : "compra"}{" "}
+          USDT: mejor {direction === "sell" ? "venta" : "compra"}{" "}
           {fmtRate(usdtRateFor(direction, rates))}
         </span>
       </div>
@@ -869,7 +869,7 @@ function Footer() {
         >
           dolarapi.com
         </a>{" "}
-        · USDT vía Binance P2P (mejores anuncios para ~100 USD).
+        · USDT vía Binance P2P (mejor anuncio para tu monto).
       </p>
       <p className="mt-1">
         Valores referenciales. Verifica siempre antes de operar. 🙌

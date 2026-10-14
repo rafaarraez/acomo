@@ -39,22 +39,27 @@ async function fetchDolarApi(
 }
 
 interface P2PAdv {
-  adv: { price: string; minSingleTransAmount: string; maxSingleTransAmount: string };
+  adv: {
+    price: string;
+    minSingleTransAmount: string;
+    maxSingleTransAmount: string;
+    isTradable?: boolean;
+  };
 }
-
-/** Cuántos de los mejores anuncios promediar (los de arriba del libro). */
-const TOP_ADS = 5;
 
 /**
  * Binance devuelve los anuncios ordenados del mejor al peor para quien opera
- * (mayor precio de venta / menor de compra). Promediamos solo los primeros:
- * es el rango real al que uno cierra el cambio, no un promedio diluido por
- * anuncios lejanos que nadie toma.
+ * (mayor precio de venta / menor de compra), ya filtrados por el monto. Nos
+ * quedamos con el primero que se pueda tomar: la "mejor venta" / "mejor
+ * compra", el mismo precio que ves arriba del todo al abrir Binance con ese
+ * monto.
  */
-function bestMean(values: number[]): number {
-  const clean = values.filter((v) => isFinite(v) && v > 0).slice(0, TOP_ADS);
-  if (clean.length === 0) return 0;
-  return clean.reduce((a, b) => a + b, 0) / clean.length;
+function bestPrice(ads: P2PAdv[]): number {
+  for (const { adv } of ads) {
+    const price = Number(adv.price);
+    if (adv.isTradable !== false && isFinite(price) && price > 0) return price;
+  }
+  return 0;
 }
 
 /**
@@ -85,7 +90,7 @@ const BINANCE_HEADERS = {
 async function fetchP2POnce(
   tradeType: "SELL" | "BUY",
   refVes: number,
-): Promise<{ avg: number; count: number }> {
+): Promise<P2PResult> {
   const res = await fetch(BINANCE_P2P, {
     method: "POST",
     headers: BINANCE_HEADERS,
@@ -103,8 +108,8 @@ async function fetchP2POnce(
   });
   if (!res.ok) throw new Error(`binance ${tradeType} -> ${res.status}`);
   const json = (await res.json()) as { data?: P2PAdv[] };
-  const prices = (json.data ?? []).map((d) => Number(d.adv.price));
-  return { avg: bestMean(prices), count: Math.min(prices.length, TOP_ADS) };
+  const ads = json.data ?? [];
+  return { price: bestPrice(ads), count: ads.length };
 }
 
 /** Binance es intermitente (403 esporádicos): reintenta una vez. */
@@ -122,7 +127,8 @@ async function fetchP2P(tradeType: "SELL" | "BUY", refVes: number) {
 // no le pegamos a Binance en cada tecla / cada 90s / cada pestaña, y montos
 // parecidos siempre tienen su tasa. (Caché por proceso: en despliegues con
 // varias instancias cada una tiene la suya, igual acota las llamadas.)
-type P2PResult = { avg: number; count: number };
+/** Mejor precio del lado consultado y cuántos anuncios había para el monto. */
+type P2PResult = { price: number; count: number };
 const P2P_TTL_MS = 60_000; // 60s
 const p2pCache = new Map<string, { at: number; data: P2PResult }>();
 
@@ -149,7 +155,7 @@ async function fetchP2PCached(
   if (hit && now - hit.at < P2P_TTL_MS) return hit.data;
 
   const data = await fetchP2P(tradeType, refVes);
-  if (data.avg > 0) {
+  if (data.price > 0) {
     p2pCache.set(key, { at: now, data });
     return data;
   }
@@ -199,14 +205,15 @@ export async function getRates(refOverride?: number): Promise<Rates> {
     fetchP2PCached("BUY", tier.key, bucketRef),
   ]);
 
-  let usdtSell = sell.status === "fulfilled" ? sell.value.avg : 0;
-  let usdtBuy = buy.status === "fulfilled" ? buy.value.avg : 0;
+  let usdtSell = sell.status === "fulfilled" ? sell.value.price : 0;
+  let usdtBuy = buy.status === "fulfilled" ? buy.value.price : 0;
   const usdtSampleSize =
     (sell.status === "fulfilled" ? sell.value.count : 0) +
     (buy.status === "fulfilled" ? buy.value.count : 0);
   let usdtSource: Rates["usdtSource"] = "binance";
 
-  // Promedio USDT: media de venta y compra si ambas existen; si no, la que haya.
+  // Punto medio entre mejor venta y mejor compra (si falta una, la que haya).
+  // Solo de respaldo: los cálculos usan el lado de la operación.
   const sides = [usdtSell, usdtBuy].filter((v) => v > 0);
   let usdtAvg = sides.length
     ? sides.reduce((a, b) => a + b, 0) / sides.length

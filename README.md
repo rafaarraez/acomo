@@ -32,7 +32,7 @@ importa: *cuánto te ahorras pagando en USDT en vez de a tasa oficial.*
 |---|---|
 | 💱 **Convertidor de 4 monedas** | Bs, USD, EUR y USDT en cualquier dirección. Toca un resultado y se copia al portapapeles. |
 | 💰 **Calculadora de ahorro** | El corazón de la app: compara cubrir un monto a tasa BCV vs. con USDT y te dice el ahorro en % y en plata. |
-| 🔄 **Venta y compra por separado** | No usa un promedio: si vendes USDT aplica el precio de venta; si compras, el de compra. El convertidor usa la misma tasa, así que las cifras cuadran en toda la página. |
+| 🔄 **Venta y compra por separado** | No usa un promedio: si vendes USDT aplica la mejor venta de Binance; si compras, la mejor compra. El convertidor usa la misma tasa, así que las cifras cuadran en toda la página. |
 | 📡 **Tasas frescas** | Auto-refresco cada 90 s **solo con la pestaña visible**, más un botón de "Actualizar". |
 | 🎯 **Tasa según tu monto** | La consulta a Binance se ancla al tamaño real de tu operación: la tasa de 100 $ no es la de 10.000 $. |
 | 📲 **Comparte en un toque** | Arma el texto listo para WhatsApp con el menú nativo (o abre WhatsApp Web si no está disponible). |
@@ -86,8 +86,9 @@ flowchart LR
 
 **USDT** → el libro de anuncios de Binance P2P, con varias decisiones deliberadas:
 
-- Se promedian **solo los 5 mejores anuncios**, que es el rango al que uno cierra
-  el cambio de verdad — no un promedio diluido por anuncios que nadie toma.
+- Se toma la **mejor venta** y la **mejor compra**: el primer anuncio que se puede
+  tomar en cada lado, el mismo precio que ves arriba del todo al abrir Binance con
+  tu monto. Nada de promedios: así lo que dice la app lo puedes comprobar en Binance.
 - Se filtra por **monto**: los anuncios de rangos millonarios sesgan la tasa, así que
   la búsqueda se ancla al equivalente de tu operación (por defecto ~100 $, calculado
   con el BCV del día para que escale con la devaluación).
@@ -177,7 +178,7 @@ curl 'http://localhost:3000/api/rates?ref=80000'
 ```
 
 `ref` es el monto de tu operación **en bolívares** (opcional). Devuelve el objeto
-[`Rates`](lib/exchange.ts) con BCV USD/EUR, USDT venta/compra/promedio, la fuente usada,
+[`Rates`](lib/exchange.ts) con BCV USD/EUR, USDT mejor venta/mejor compra/punto medio, la fuente usada,
 el tamaño de la muestra y los errores. Sin caché, para que siempre sea el valor del momento.
 
 ---

@@ -31,7 +31,7 @@ export const CURRENCY_META: Record<
     short: "USDT",
     symbol: "₮",
     emoji: "💵",
-    hint: "Promedio Binance P2P",
+    hint: "Mejor anuncio de Binance P2P",
   },
   VES: {
     label: "Bolívares",
@@ -48,15 +48,15 @@ export interface Rates {
   bcvUsd: number;
   /** VES por 1 EUR (tasa oficial BCV). */
   bcvEur: number;
-  /** VES que recibes al VENDER 1 USDT en Binance P2P (promedio filtrado). */
+  /** Mejor venta: VES que recibes al VENDER 1 USDT (mejor anuncio de Binance P2P para el monto). */
   usdtSell: number;
-  /** VES que pagas al COMPRAR 1 USDT en Binance P2P (promedio filtrado). */
+  /** Mejor compra: VES que pagas al COMPRAR 1 USDT (mejor anuncio de Binance P2P para el monto). */
   usdtBuy: number;
-  /** Promedio de venta y compra — la "tasa USDT" de referencia. */
+  /** Punto medio entre mejor venta y mejor compra. Solo de respaldo. */
   usdtAvg: number;
   /** Monto de referencia (Bs) usado para filtrar los anuncios P2P. */
   refVes: number;
-  /** Nº de anuncios P2P que entraron en el promedio (venta + compra). */
+  /** Nº de anuncios P2P que había para el monto (venta + compra). */
   usdtSampleSize: number;
   /** De dónde salió la tasa USDT: Binance directo o aproximación del paralelo. */
   usdtSource: "binance" | "paralelo" | "none";
